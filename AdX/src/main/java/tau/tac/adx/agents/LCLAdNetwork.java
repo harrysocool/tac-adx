@@ -18,7 +18,7 @@ import se.sics.tasim.aw.Message;
 import se.sics.tasim.props.SimulationStatus;
 import se.sics.tasim.props.StartInfo;
 import tau.tac.adx.ads.properties.AdType;
-import tau.tac.adx.agents.SampleAdNetwork.CampaignData;
+import tau.tac.adx.agents.LCLAdNetwork.CampaignData;
 import tau.tac.adx.demand.CampaignStats;
 import tau.tac.adx.devices.Device;
 import tau.tac.adx.props.AdxBidBundle;
@@ -43,7 +43,7 @@ import edu.umich.eecs.tac.props.BankStatus;
 public class LCLAdNetwork extends Agent {
 
 	private final Logger log = Logger
-			.getLogger(SampleAdNetwork.class.getName());
+			.getLogger(LCLAdNetwork.class.getName());
 
 	/*
 	 * Basic simulation information. An agent should receive the {@link
@@ -156,7 +156,7 @@ public class LCLAdNetwork extends Agent {
 		campaignData
 				.setBudget(initialCampaignMessage.getBudgetMillis() / 1000.0);
 		currCampaign = campaignData;
-//		genCampaignQueries(currCampaign);
+		genCampaignQueries(currCampaign);
 
 		/*
 		 * The initial campaign is already allocated to our agent so we add it
@@ -165,7 +165,6 @@ public class LCLAdNetwork extends Agent {
 		System.out.println("Day " + day + ": Allocated campaign - "
 				+ campaignData);
 		myCampaigns.put(initialCampaignMessage.getId(), campaignData);
-		log.info(myCampaigns.toString());
 		
 	}
 	@Override
@@ -210,5 +209,100 @@ public class LCLAdNetwork extends Agent {
 		}
 	}
 	
+	/*
+	 * genarates the campaign queries relevant for the specific campaign, and
+	 * assign them as the campaigns campaignQueries field
+	 */
+	private void genCampaignQueries(CampaignData campaignData) {
+		Set<AdxQuery> campaignQueriesSet = new HashSet<AdxQuery>();
+		for (String PublisherName : publisherNames) {
+			campaignQueriesSet.add(new AdxQuery(PublisherName,
+					campaignData.targetSegment, Device.mobile, AdType.text));
+			campaignQueriesSet.add(new AdxQuery(PublisherName,
+					campaignData.targetSegment, Device.mobile, AdType.video));
+			campaignQueriesSet.add(new AdxQuery(PublisherName,
+					campaignData.targetSegment, Device.pc, AdType.text));
+			campaignQueriesSet.add(new AdxQuery(PublisherName,
+					campaignData.targetSegment, Device.pc, AdType.video));
+		}
+
+		campaignData.campaignQueries = new AdxQuery[campaignQueriesSet.size()];
+		campaignQueriesSet.toArray(campaignData.campaignQueries);
+		System.out.println("!!!!!!!!!!!!!!!!!!!!!!"
+				+ Arrays.toString(campaignData.campaignQueries)
+				+ "!!!!!!!!!!!!!!!!");
+
+	}
+
+	private class CampaignData {
+		/* campaign attributes as set by server */
+		Long reachImps;
+		long dayStart;
+		long dayEnd;
+		Set<MarketSegment> targetSegment;
+		double videoCoef;
+		double mobileCoef;
+		int id;
+		private AdxQuery[] campaignQueries;// array of queries relvent for the
+											// campaign.
+
+		/* campaign info as reported */
+		CampaignStats stats;
+		double budget;
+
+		public CampaignData(InitialCampaignMessage icm) {
+			reachImps = icm.getReachImps();
+			dayStart = icm.getDayStart();
+			dayEnd = icm.getDayEnd();
+			targetSegment = icm.getTargetSegment();
+			videoCoef = icm.getVideoCoef();
+			mobileCoef = icm.getMobileCoef();
+			id = icm.getId();
+
+			stats = new CampaignStats(0, 0, 0);
+			budget = 0.0;
+		}
+
+		public void setBudget(double d) {
+			budget = d;
+		}
+
+		public CampaignData(CampaignOpportunityMessage com) {
+			dayStart = com.getDayStart();
+			dayEnd = com.getDayEnd();
+			id = com.getId();
+			reachImps = com.getReachImps();
+			targetSegment = com.getTargetSegment();
+			mobileCoef = com.getMobileCoef();
+			videoCoef = com.getVideoCoef();
+			stats = new CampaignStats(0, 0, 0);
+			budget = 0.0;
+		}
+
+		@Override
+		public String toString() {
+			return "Campaign ID " + id + ": " + "day " + dayStart + " to "
+					+ dayEnd + " " + targetSegment + ", reach: " + reachImps
+					+ " coefs: (v=" + videoCoef + ", m=" + mobileCoef + ")";
+		}
+
+		int impsTogo() {
+			return (int) Math.max(0, reachImps - stats.getTargetedImps());
+		}
+
+		void setStats(CampaignStats s) {
+			stats.setValues(s);
+		}
+
+		public AdxQuery[] getCampaignQueries() {
+			return campaignQueries;
+		}
+
+		public void setCampaignQueries(AdxQuery[] campaignQueries) {
+			this.campaignQueries = campaignQueries;
+		}
+
+	}
 
 }
+
