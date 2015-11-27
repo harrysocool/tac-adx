@@ -18,6 +18,7 @@ import se.sics.tasim.aw.Message;
 import se.sics.tasim.props.SimulationStatus;
 import se.sics.tasim.props.StartInfo;
 import tau.tac.adx.ads.properties.AdType;
+import tau.tac.adx.agents.SampleAdNetwork.CampaignData;
 import tau.tac.adx.demand.CampaignStats;
 import tau.tac.adx.devices.Device;
 import tau.tac.adx.props.AdxBidBundle;
@@ -125,7 +126,7 @@ public class LCLAdNetwork extends Agent {
 		ucsBid = 0.2;
 
 		myCampaigns = new HashMap<Integer, CampaignData>();
-		log.fine("AdNet " + getName() + " simulationSetup");
+		log.info("AdNet " + getName() + " simulationSetup");
 	}
 
 	@Override
@@ -134,16 +135,48 @@ public class LCLAdNetwork extends Agent {
 		bidBundle = null;
 	}
 
+	/**
+	 * On day 0, a campaign (the "initial campaign") is allocated to each
+	 * competing agent. The campaign starts on day 1. The address of the
+	 * server's AdxAgent (to which bid bundles are sent) and DemandAgent (to
+	 * which bids regarding campaign opportunities may be sent in subsequent
+	 * days) are also reported in the initial campaign message
+	 */
+	private void handleInitialCampaignMessage(
+			InitialCampaignMessage campaignMessage) {
+		System.out.println(campaignMessage.toString());
+
+		day = 0;
+
+		initialCampaignMessage = campaignMessage;
+		demandAgentAddress = campaignMessage.getDemandAgentAddress();
+		adxAgentAddress = campaignMessage.getAdxAgentAddress();
+
+		CampaignData campaignData = new CampaignData(initialCampaignMessage);
+		campaignData
+				.setBudget(initialCampaignMessage.getBudgetMillis() / 1000.0);
+		currCampaign = campaignData;
+//		genCampaignQueries(currCampaign);
+
+		/*
+		 * The initial campaign is already allocated to our agent so we add it
+		 * to our allocated-campaigns list.
+		 */
+		System.out.println("Day " + day + ": Allocated campaign - "
+				+ campaignData);
+		myCampaigns.put(initialCampaignMessage.getId(), campaignData);
+		log.info(myCampaigns.toString());
+		
+	}
 	@Override
 	protected void messageReceived(Message message) {
 		try {
 			Transportable content = message.getContent();
 
-			 log.fine(message.getContent().getClass().toString());
-			 System.out.println(content);
+//			 log.info(message.getContent().getClass().toString());
 
-//			if (content instanceof InitialCampaignMessage) {
-//				handleInitialCampaignMessage((InitialCampaignMessage) content);
+			if (content instanceof InitialCampaignMessage) {
+				handleInitialCampaignMessage((InitialCampaignMessage) content);}
 //			} else if (content instanceof CampaignOpportunityMessage) {
 //				handleICampaignOpportunityMessage((CampaignOpportunityMessage) content);
 //			} else if (content instanceof CampaignReport) {
