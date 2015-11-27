@@ -1,0 +1,181 @@
+package tau.tac.adx.agents;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Random;
+import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import se.sics.isl.transport.Transportable;
+import se.sics.tasim.aw.Agent;
+import se.sics.tasim.aw.Message;
+import se.sics.tasim.props.SimulationStatus;
+import se.sics.tasim.props.StartInfo;
+import tau.tac.adx.ads.properties.AdType;
+import tau.tac.adx.demand.CampaignStats;
+import tau.tac.adx.devices.Device;
+import tau.tac.adx.props.AdxBidBundle;
+import tau.tac.adx.props.AdxQuery;
+import tau.tac.adx.props.PublisherCatalog;
+import tau.tac.adx.props.PublisherCatalogEntry;
+import tau.tac.adx.props.ReservePriceInfo;
+import tau.tac.adx.report.adn.AdNetworkReport;
+import tau.tac.adx.report.adn.MarketSegment;
+import tau.tac.adx.report.demand.AdNetBidMessage;
+import tau.tac.adx.report.demand.AdNetworkDailyNotification;
+import tau.tac.adx.report.demand.CampaignOpportunityMessage;
+import tau.tac.adx.report.demand.CampaignReport;
+import tau.tac.adx.report.demand.CampaignReportKey;
+import tau.tac.adx.report.demand.InitialCampaignMessage;
+import tau.tac.adx.report.demand.campaign.auction.CampaignAuctionReport;
+import tau.tac.adx.report.publisher.AdxPublisherReport;
+import tau.tac.adx.report.publisher.AdxPublisherReportEntry;
+import edu.umich.eecs.tac.props.Ad;
+import edu.umich.eecs.tac.props.BankStatus;
+
+public class LCLAdNetwork extends Agent {
+
+	private final Logger log = Logger
+			.getLogger(SampleAdNetwork.class.getName());
+
+	/*
+	 * Basic simulation information. An agent should receive the {@link
+	 * StartInfo} at the beginning of the game or during recovery.
+	 */
+	@SuppressWarnings("unused")
+	private StartInfo startInfo;
+
+	/**
+	 * Messages received:
+	 * 
+	 * We keep all the {@link CampaignReport campaign reports} delivered to the
+	 * agent. We also keep the initialization messages {@link PublisherCatalog}
+	 * and {@link InitialCampaignMessage} and the most recent messages and
+	 * reports {@link CampaignOpportunityMessage}, {@link CampaignReport}, and
+	 * {@link AdNetworkDailyNotification}.
+	 */
+	private final Queue<CampaignReport> campaignReports;
+	private PublisherCatalog publisherCatalog;
+	private InitialCampaignMessage initialCampaignMessage;
+	private AdNetworkDailyNotification adNetworkDailyNotification;
+
+	/*
+	 * The addresses of server entities to which the agent should send the daily
+	 * bids data
+	 */
+	private String demandAgentAddress;
+	private String adxAgentAddress;
+
+	/*
+	 * we maintain a list of queries - each characterized by the web site (the
+	 * publisher), the device type, the ad type, and the user market segment
+	 */
+	private AdxQuery[] queries;
+
+	/**
+	 * Information regarding the latest campaign opportunity announced
+	 */
+	private CampaignData pendingCampaign;
+
+	/**
+	 * We maintain a collection (mapped by the campaign id) of the campaigns won
+	 * by our agent.
+	 */
+	private Map<Integer, CampaignData> myCampaigns;
+
+	/*
+	 * the bidBundle to be sent daily to the AdX
+	 */
+	private AdxBidBundle bidBundle;
+
+	/*
+	 * The current bid level for the user classification service
+	 */
+	double ucsBid;
+
+	/*
+	 * The targeted service level for the user classification service
+	 */
+	double ucsTargetLevel;
+
+	/*
+	 * current day of simulation
+	 */
+	private int day;
+	private String[] publisherNames;
+	private CampaignData currCampaign;
+	
+	public LCLAdNetwork() {
+		campaignReports = new LinkedList<CampaignReport>();
+	}
+	
+	@Override
+	protected void simulationSetup() {
+
+		day = 0;
+		bidBundle = new AdxBidBundle();
+
+		/* initial bid between 0.1 and 0.2 */
+		ucsBid = 0.2;
+
+		myCampaigns = new HashMap<Integer, CampaignData>();
+		log.fine("AdNet " + getName() + " simulationSetup");
+	}
+
+	@Override
+	protected void simulationFinished() {
+		campaignReports.clear();
+		bidBundle = null;
+	}
+
+	@Override
+	protected void messageReceived(Message message) {
+		try {
+			Transportable content = message.getContent();
+
+			 log.fine(message.getContent().getClass().toString());
+			 System.out.println(content);
+
+//			if (content instanceof InitialCampaignMessage) {
+//				handleInitialCampaignMessage((InitialCampaignMessage) content);
+//			} else if (content instanceof CampaignOpportunityMessage) {
+//				handleICampaignOpportunityMessage((CampaignOpportunityMessage) content);
+//			} else if (content instanceof CampaignReport) {
+//				handleCampaignReport((CampaignReport) content);
+//			} else if (content instanceof AdNetworkDailyNotification) {
+//				handleAdNetworkDailyNotification((AdNetworkDailyNotification) content);
+//			} else if (content instanceof AdxPublisherReport) {
+//				handleAdxPublisherReport((AdxPublisherReport) content);
+//			} else if (content instanceof SimulationStatus) {
+//				handleSimulationStatus((SimulationStatus) content);
+//			} else if (content instanceof PublisherCatalog) {
+//				handlePublisherCatalog((PublisherCatalog) content);
+//			} else if (content instanceof AdNetworkReport) {
+//				handleAdNetworkReport((AdNetworkReport) content);
+//			} else if (content instanceof StartInfo) {
+//				handleStartInfo((StartInfo) content);
+//			} else if (content instanceof BankStatus) {
+//				handleBankStatus((BankStatus) content);
+//			} else if (content instanceof CampaignAuctionReport) {
+//				hadnleCampaignAuctionReport((CampaignAuctionReport) content);
+//			} else if (content instanceof ReservePriceInfo) {
+//				// ((ReservePriceInfo)content).getReservePriceType();
+//			} else {
+//				System.out.println("UNKNOWN Message Received: " + content);
+//			}
+
+		} catch (NullPointerException e) {
+			this.log.log(Level.SEVERE,
+					"Exception thrown while trying to parse message." + e);
+			return;
+		}
+	}
+	
+
+}
