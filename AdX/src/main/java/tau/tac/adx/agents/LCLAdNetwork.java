@@ -24,7 +24,7 @@ import tau.tac.adx.props.AdxBidBundle;
 import tau.tac.adx.props.AdxQuery;
 import tau.tac.adx.props.PublisherCatalog;
 import tau.tac.adx.props.PublisherCatalogEntry;
-import tau.tac.adx.props.ReservePriceInfo;
+//import tau.tac.adx.props.ReservePriceInfo;
 import tau.tac.adx.report.adn.AdNetworkKey;
 import tau.tac.adx.report.adn.AdNetworkReport;
 import tau.tac.adx.report.adn.MarketSegment;
@@ -111,6 +111,10 @@ public class LCLAdNetwork extends Agent {
 	 * The qualityScore for the quality level
 	 */
 	private double qualityScore;
+	private double min_cmpBidMillis;
+	private double max_cmpBidMillis;
+	private double cmpBidfactor;
+	private double lastBid;
 
 	/*
 	 * The targeted service level for the user classification service
@@ -268,7 +272,10 @@ public class LCLAdNetwork extends Agent {
 
 		long cmpimps = com.getReachImps();
 		// long cmpBidMillis = random.nextInt((int) cmpimps);
-		long cmpBidMillis = cmpimps;
+		min_cmpBidMillis = cmpimps/qualityScore;
+		max_cmpBidMillis = cmpimps*qualityScore;
+		cmpBidfactor = 1.0;
+		long cmpBidMillis = (long) (min_cmpBidMillis+(max_cmpBidMillis-min_cmpBidMillis)*cmpBidfactor);
 
 		log.info("Day " + day
 				+ ": Campaign total budget bid (millis): " + cmpBidMillis);
@@ -283,8 +290,8 @@ public class LCLAdNetwork extends Agent {
 			/* Determine how much ucsBid to submit*/
 			if(day >= currCampaign.dayEnd) {
 				ucsBid = 0;
-			}else{
-				ucsBid = 0.1 + random.nextDouble()/10.0;
+			}else {
+				ucsBid = 0.15;
 			}
 			log.info("Day " + day + ": adNetwork Daily Notification: ucs level reported: "
 					+ ucsLevel);
@@ -365,18 +372,21 @@ public class LCLAdNetwork extends Agent {
 		/*
 		 * 
 		 */
-
+		for (CampaignData currCampaign : myCampaigns.values()) {
+		
+//		currCampaign = myCampaigns.get(i);
 		int dayBiddingFor = day + 1;
-
-		Random random = new Random();
 
 		/* A random bid, fixed for all queries of the campaign */
 		/*
 		 * Note: bidding per 1000 imps (CPM) - no more than average budget
 		 * revenue per imp
 		 */
-
-		double rbid = 10.0 * random.nextDouble();
+		double rbid;
+		rbid = 0.9 * (1000 * (currCampaign.budget - currCampaign.stats.getCost()) / currCampaign.impsTogo());
+		log.info("Impressions Remaining:         " + currCampaign.impsTogo());
+		log.info("Impression Bid:               " + rbid);
+//		double rbid = 1000.0;
 
 		/*
 		 * add bid entries w.r.t. each active campaign with remaining contracted
@@ -386,56 +396,56 @@ public class LCLAdNetwork extends Agent {
 		 * matching target segment.
 		 */
 
-		if ((dayBiddingFor >= currCampaign.dayStart)
-				&& (dayBiddingFor <= currCampaign.dayEnd)
-				&& (currCampaign.impsTogo() > 0)) {
-
-			int entCount = 0;
-
-			for (AdxQuery query : currCampaign.campaignQueries) {
-				if (currCampaign.impsTogo() - entCount > 0) {
-					/*
-					 * among matching entries with the same campaign id, the AdX
-					 * randomly chooses an entry according to the designated
-					 * weight. by setting a constant weight 1, we create a
-					 * uniform probability over active campaigns(irrelevant
-					 * because we are bidding only on one campaign)
-					 */
-					if (query.getDevice() == Device.pc) {
-						if (query.getAdType() == AdType.text) {
-							entCount++;
+			if ((dayBiddingFor >= currCampaign.dayStart)
+					&& (dayBiddingFor <= currCampaign.dayEnd)
+					&& (currCampaign.impsTogo() > 0)) {
+	
+				int entCount = 0;
+	
+				for (AdxQuery query : currCampaign.campaignQueries) {
+					if (currCampaign.impsTogo() - entCount > 0) {
+						/*
+						 * among matching entries with the same campaign id, the AdX
+						 * randomly chooses an entry according to the designated
+						 * weight. by setting a constant weight 1, we create a
+						 * uniform probability over active campaigns(irrelevant
+						 * because we are bidding only on one campaign)
+						 */
+						if (query.getDevice() == Device.pc) {
+							if (query.getAdType() == AdType.text) {
+								entCount++;
+							} else {
+								entCount += currCampaign.videoCoef;
+							}
 						} else {
-							entCount += currCampaign.videoCoef;
+							if (query.getAdType() == AdType.text) {
+								entCount += currCampaign.mobileCoef;
+							} else {
+								entCount += currCampaign.videoCoef
+										+ currCampaign.mobileCoef;
+							}
+	
 						}
-					} else {
-						if (query.getAdType() == AdType.text) {
-							entCount += currCampaign.mobileCoef;
-						} else {
-							entCount += currCampaign.videoCoef
-									+ currCampaign.mobileCoef;
-						}
-
+						bidBundle.addQuery(query, rbid, new Ad(null),
+								currCampaign.id, 1);
 					}
-					bidBundle.addQuery(query, rbid, new Ad(null),
-							currCampaign.id, 1);
 				}
+	
+				double impressionLimit = currCampaign.impsTogo();
+				double budgetLimit = currCampaign.budget;
+				bidBundle.setCampaignDailyLimit(currCampaign.id,
+						(int) impressionLimit, budgetLimit);
+	
+				log.info("Day " + day + ": Updated " + entCount
+						+ " Bid Bundle entries for Campaign id " + currCampaign.id);
 			}
-
-			double impressionLimit = currCampaign.impsTogo();
-			double budgetLimit = currCampaign.budget;
-			bidBundle.setCampaignDailyLimit(currCampaign.id,
-					(int) impressionLimit, budgetLimit);
-
-			log.info("Day " + day + ": Updated " + entCount
-					+ " Bid Bundle entries for Campaign id " + currCampaign.id);
-		}
-
-		if (bidBundle != null) {
-			log.info("Day " + day + ": Sending BidBundle");
-			sendMessage(adxAgentAddress, bidBundle);
-		}
+	
+			if (bidBundle != null) {
+				log.info("Day " + day + ": Sending BidBundle");
+				sendMessage(adxAgentAddress, bidBundle);
+			}
+		}	
 	}
-
 	/**
 	 * Campaigns performance w.r.t. each allocated campaign
 	 */
@@ -452,6 +462,7 @@ public class LCLAdNetwork extends Agent {
 			CampaignStats cstats = campaignReport.getCampaignReportEntry(
 					campaignKey).getCampaignStats();
 			myCampaigns.get(cmpId).setStats(cstats);
+			lastBid = 0;
 			log.info("Day " + day + ": Updating campaign " + cmpId
 					+ " Ends at Day " + myCampaigns.get(cmpId).dayEnd
 					+ "Reaches :" + myCampaigns.get(cmpId).reachImps
@@ -484,6 +495,7 @@ public class LCLAdNetwork extends Agent {
 		log.info("Day " + day + " : AdNetworkReport");
 		for (AdNetworkKey adnetKey : adnetReport.keys()) {
 			log.info(adnetKey.toString());
+//			log.info(adnetKey.);
 		}
 		log.info("DailyCost = "+ adnetReport.getDailyCost());
 		/*
