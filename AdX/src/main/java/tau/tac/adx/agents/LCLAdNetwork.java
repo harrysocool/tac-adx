@@ -363,12 +363,12 @@ public class LCLAdNetwork extends Agent {
 
 		adNetworkDailyNotification = notificationMessage;
 
-		if(notificationMessage.getWinner() != "LCL"){
+		if(notificationMessage.getCostMillis() == 0){
 			greedyfactor /= 1.2;
 		}else if(notificationMessage.getCostMillis() == cmpBidMillis){
 			greedyfactor *= 1;
 		}else if(notificationMessage.getCostMillis() != cmpBidMillis){
-			greedyfactor *= 1.2;
+			greedyfactor *= 1.5;
 		}
 		
 		log.info("Day " + day + ": Daily Notification for campaign "
