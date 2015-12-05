@@ -116,6 +116,7 @@ public class SampleAdNetwork extends Agent {
 	private String[] publisherNames;
 	private CampaignData currCampaign;
 
+
 	public SampleAdNetwork() {
 		campaignReports = new LinkedList<CampaignReport>();
 	}
@@ -395,6 +396,7 @@ public class SampleAdNetwork extends Agent {
 
 			double impressionLimit = currCampaign.impsTogo();
 			double budgetLimit = currCampaign.budget;
+			
 			bidBundle.setCampaignDailyLimit(currCampaign.id,
 					(int) impressionLimit, budgetLimit);
 
@@ -545,13 +547,12 @@ public class SampleAdNetwork extends Agent {
 	 */
 	private void getPublishersNames() {
 		if (null == publisherNames && publisherCatalog != null) {
-			ArrayList<String> names = new ArrayList<String>();
 			for (PublisherCatalogEntry pce : publisherCatalog) {
-				names.add(pce.getPublisherName());
+				pubNames.add(pce.getPublisherName());
 			}
 
-			publisherNames = new String[names.size()];
-			names.toArray(publisherNames);
+			publisherNames = new String[pubNames.size()];
+			pubNames.toArray(publisherNames);
 		}
 	}
 
