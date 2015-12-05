@@ -27,6 +27,7 @@ import tau.tac.adx.props.PublisherCatalogEntry;
 //import tau.tac.adx.props.ReservePriceInfo;
 import tau.tac.adx.report.adn.AdNetworkKey;
 import tau.tac.adx.report.adn.AdNetworkReport;
+import tau.tac.adx.report.adn.AdNetworkReportEntry;
 import tau.tac.adx.report.adn.MarketSegment;
 import tau.tac.adx.report.demand.AdNetBidMessage;
 import tau.tac.adx.report.demand.AdNetworkDailyNotification;
@@ -268,7 +269,7 @@ public class LCLAdNetwork extends Agent {
 		 * (upper bound) price for the auction.
 		 */
 
-		 Random random = new Random();
+//		 Random random = new Random();
 
 		long cmpimps = com.getReachImps();
 		// long cmpBidMillis = random.nextInt((int) cmpimps);
@@ -482,7 +483,7 @@ public class LCLAdNetwork extends Agent {
 		for (PublisherCatalogEntry publisherKey : adxPublisherReport.keys()) {
 			AdxPublisherReportEntry entry = adxPublisherReport
 					.getEntry(publisherKey);
-			log.info(entry.toString());
+//			log.info(entry.toString());
 		}
 	}
 
@@ -494,10 +495,17 @@ public class LCLAdNetwork extends Agent {
 
 		log.info("Day " + day + " : AdNetworkReport");
 		for (AdNetworkKey adnetKey : adnetReport.keys()) {
-			log.info(adnetKey.toString());
-//			log.info(adnetKey.);
+			AdNetworkReportEntry entry = adnetReport .getAdNetworkReportEntry(adnetKey);
+			System.out.println("Publisher: " + adnetKey.getPublisher() 
+								+ " " + adnetKey.getAdType() + " " + adnetKey.getDevice()
+								+ " " + adnetKey.getIncome() + " " + adnetKey.getGender()
+								+ "************"
+								+ " BidCount: " + entry.getBidCount()
+								+ " Bidwin: " + entry.getWinCount()
+								+ " Bid Cost: " + entry.getCost()); 
 		}
 		log.info("DailyCost = "+ adnetReport.getDailyCost());
+		
 		/*
 		 * for (AdNetworkKey adnetKey : adnetReport.keys()) {
 		 * 
@@ -585,7 +593,7 @@ public class LCLAdNetwork extends Agent {
 			queries = new AdxQuery[querySet.size()];
 			querySet.toArray(queries);
 			for (AdxQuery arrays : querySet) {
-				log.info(arrays.toString());
+//				log.info(arrays.toString());
 			}
 		}
 	}
