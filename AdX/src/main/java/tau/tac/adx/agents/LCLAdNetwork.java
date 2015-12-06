@@ -172,8 +172,8 @@ public class LCLAdNetwork extends Agent {
 				handleBankStatus((BankStatus) content);
 //			} else if (content instanceof CampaignAuctionReport) {
 //				hadnleCampaignAuctionReport((CampaignAuctionReport) content);
-			} else if (content instanceof ReservePriceInfo) {
-				handleReservePriceInfo ((ReservePriceInfo) content);
+//			} else if (content instanceof ReservePriceInfo) {
+//				handleReservePriceInfo ((ReservePriceInfo) content);
 			} else {
 				System.out.println("UNKNOWN Message Received: " + content);
 			}
@@ -185,10 +185,10 @@ public class LCLAdNetwork extends Agent {
 		}
 	}
 
-	private void handleReservePriceInfo(ReservePriceInfo content) {
-		// ingoring - this message is obsolete
-		log.info("Day " + day + " :" + content.toString());
-	}
+//	private void handleReservePriceInfo(ReservePriceInfo content) {
+//		// ingoring - this message is obsolete
+//		log.info("Day " + day + " :" + content.toString());
+//	}
 
 	private void handleBankStatus(BankStatus content) {
 		log.info("Day " + day + ":			" + content.toString());
@@ -280,7 +280,7 @@ public class LCLAdNetwork extends Agent {
 
 		long cmpimps = com.getReachImps();
 
-		min_cmpBidMillis = cmpimps/qualityScore/10 + 1;
+		min_cmpBidMillis = cmpimps/qualityScore/5 + 1;
 		max_cmpBidMillis = cmpimps*qualityScore - 1;
 
 		if(cmpimps * greedyFactor > max_cmpBidMillis){
@@ -351,10 +351,10 @@ public class LCLAdNetwork extends Agent {
 			greedyFactor = 1.0;
 		}else if(notificationMessage.getCostMillis() == 0){
 			greedyFactor /= 1.2;
-		}else if(notificationMessage.getCostMillis() == cmpBidMillis){
+		}else if(notificationMessage.getCostMillis() == cmpBidMillis + 1){
 			greedyFactor *= 1;
 		}else if(notificationMessage.getCostMillis() != cmpBidMillis){
-			greedyFactor *= 1.5;
+			greedyFactor *= 2.8;
 		}
 		
 		log.info("Day " + day + ": Daily Notification for campaign "
@@ -428,6 +428,8 @@ public class LCLAdNetwork extends Agent {
 			double budgetDailyLimit;
 			double impbidfactor;
 			double cmpPeriod = eachMyCampaign.dayEnd - eachMyCampaign.dayStart + 1;
+			double finishRate = eachMyCampaign.finishRate;
+			double impBidBase = eachMyCampaign.budget / eachMyCampaign.reachImps * 1000;
 			
 			if(qualityScore <= 0.85){
 				impressionLimit =  eachMyCampaign.impsTogo() * 1.1;
@@ -436,7 +438,7 @@ public class LCLAdNetwork extends Agent {
 			}else{
 				impressionLimit = eachMyCampaign.impsTogo();
 				budgetDailyLimit = eachMyCampaign.budget/cmpPeriod*0.75;
-				impbidfactor = 5 + new Random().nextDouble() * 5;
+				impbidfactor = 5 + finishRate;
 			}
 			
 			/*
@@ -448,20 +450,18 @@ public class LCLAdNetwork extends Agent {
 			 */
 	
 			if ((dayBiddingFor >= eachMyCampaign.dayStart)
-					&& (dayBiddingFor <= eachMyCampaign.dayEnd)
-					&& ((eachMyCampaign.reachImps - eachMyCampaign.impsTogo()) < impressionLimit)) {
+					&& (dayBiddingFor <= eachMyCampaign.dayEnd)) {
 		
 				int entCount = 0;
 				int weight = 0;
-				
-				if(dayBiddingFor <= eachMyCampaign.dayStart + 1){
-					impbidfactor = 10;
-					ibid = 1000 * impbidfactor * eachMyCampaign.budget / eachMyCampaign.reachImps;
+				if (day <=3){
+					ibid = 10000.0;
+				}else if(finishRate < 0.5 || dayBiddingFor <= eachMyCampaign.dayStart + 1){
+					ibid = 10.0;
 				}else if((dayBiddingFor >= eachMyCampaign.dayEnd - 2)&&(eachMyCampaign.impsTogo() > 0)){
-					impbidfactor = 10;
-					ibid = 1000 * impbidfactor * eachMyCampaign.budget / eachMyCampaign.reachImps;
+					ibid = impBidBase * 1/finishRate;
 				}else {
-					ibid = 1000 * impbidfactor * eachMyCampaign.budget / eachMyCampaign.reachImps;
+					ibid = impBidBase * 1/finishRate;
 				}
 				
 				log.info("Day " + day + ": "+"Impressions Remaining:    	" + eachMyCampaign.impsTogo());
@@ -479,20 +479,20 @@ public class LCLAdNetwork extends Agent {
 						if (query.getDevice() == Device.pc) {
 							if (query.getAdType() == AdType.text) {
 								entCount++;
-								weight = 1;
+								weight = 9;
 							} else {
 								entCount += eachMyCampaign.videoCoef;
-								weight = 7;
+								weight = 9;
 							}
 						} else {
 							if (query.getAdType() == AdType.text) {
 								entCount += eachMyCampaign.mobileCoef;
-								weight = 4;
+								weight = 9;
 //								ibid = 0;
 							} else {
 								entCount += eachMyCampaign.videoCoef
 										+ eachMyCampaign.mobileCoef;
-								weight = 5;
+								weight = 1;
 //								ibid = 0;
 							}
 		
@@ -505,11 +505,13 @@ public class LCLAdNetwork extends Agent {
 					
 				bidBundle.setCampaignDailyLimit(eachMyCampaign.id,
 							(int) impressionLimit, budgetDailyLimit);
-		
+				
+//				if (finishRate > 1.2){bidBundle = null;}
+				
 				log.info("Day " + day + ": Updated " + entCount
 							+ " Bid Bundle for Campaign id " + eachMyCampaign.id);
 			}
-		
+			
 			if (bidBundle != null) {
 				log.info("Day " + day + ": Sending BidBundle");
 				
@@ -530,15 +532,21 @@ public class LCLAdNetwork extends Agent {
 		 */
 		for (CampaignReportKey campaignKey : campaignReport.keys()) {
 			int cmpId = campaignKey.getCampaignId();
+			double finishRate;
 			CampaignStats cstats = campaignReport.getCampaignReportEntry(
 					campaignKey).getCampaignStats();
 			myCampaigns.get(cmpId).setStats(cstats);
+			
+			finishRate = cstats.getTargetedImps()/myCampaigns.get(cmpId).reachImps;
+			
+			myCampaigns.get(cmpId).setFinishRate(finishRate);
+			
 			log.info("Day " + day + ": Updating campaign " + cmpId
 					+ " Ends at Day " + myCampaigns.get(cmpId).dayEnd
 					+ " Reaches :" + myCampaigns.get(cmpId).reachImps
 					+ " tgtImps "  + cstats.getTargetedImps() 
 					);
-			log.info("Day " + day + ": "+"finish rate: 			" + cstats.getTargetedImps()/myCampaigns.get(cmpId).reachImps
+			log.info("Day " + day + ": "+"finish rate: 			" + finishRate
 					);
 			log.info("Day " + day+ ": " +"Cost of imps is 			" + cstats.getCost()
 					+ "  Bugets: 	" + myCampaigns.get(cmpId).budget
@@ -723,6 +731,7 @@ public class LCLAdNetwork extends Agent {
 		int id;
 		private AdxQuery[] campaignQueries;// array of queries relvent for the
 											// campaign.
+		double finishRate;
 
 		/* campaign info as reported */
 		CampaignStats stats;
@@ -770,6 +779,9 @@ public class LCLAdNetwork extends Agent {
 
 		void setStats(CampaignStats s) {
 			stats.setValues(s);
+		}
+		void setFinishRate(double r) {
+			finishRate = r;
 		}
 
 		public AdxQuery[] getCampaignQueries() {
