@@ -414,60 +414,61 @@ public class LCLAdNetwork extends Agent {
 		/*
 		 * 
 		 */
-		for (CampaignData currCampaign : myCampaigns.values()) {
+		for (CampaignData eachMyCampaign : myCampaigns.values()) {
 		
-		int dayBiddingFor = day + 1;
-
-		/* A random bid, fixed for all queries of the campaign */
-		/*
-		 * Note: bidding per 1000 imps (CPM) - no more than average budget
-		 * revenue per imp
-		 */
-		double ibid;
-		double impressionLimit;
-		double budgetLimit;
-		double impbidfactor;
-		
-		if(qualityScore <= 0.85){
-			impressionLimit =  currCampaign.impsTogo() * 1.05;
-			budgetLimit = currCampaign.budget;
-			impbidfactor = 10;
-		}else{
-			impressionLimit = currCampaign.impsTogo();
-			budgetLimit = currCampaign.budget*0.8;
-			impbidfactor = 5 + new Random().nextDouble() * 5;
-		}
-		
-		
-//		double rbid = 1000.0;
-		/*
-		 * add bid entries w.r.t. each active campaign with remaining contracted
-		 * impressions.
-		 * 
-		 * for now, a single entry per active campaign is added for queries of
-		 * matching target segment.
-		 */
-
-			if ((dayBiddingFor >= currCampaign.dayStart)
-					&& (dayBiddingFor <= currCampaign.dayEnd)
-					&& ((currCampaign.reachImps - currCampaign.impsTogo()) < impressionLimit)) {
+			int dayBiddingFor = day + 1;
 	
+			/* A random bid, fixed for all queries of the campaign */
+			/*
+			 * Note: bidding per 1000 imps (CPM) - no more than average budget
+			 * revenue per imp
+			 */
+			double ibid;
+			double impressionLimit;
+			double budgetDailyLimit;
+			double impbidfactor;
+			double cmpPeriod = eachMyCampaign.dayEnd - eachMyCampaign.dayStart + 1;
+			
+			if(qualityScore <= 0.85){
+				impressionLimit =  eachMyCampaign.impsTogo() * 1.1;
+				budgetDailyLimit = eachMyCampaign.budget/cmpPeriod;
+				impbidfactor = 10;
+			}else{
+				impressionLimit = eachMyCampaign.impsTogo();
+				budgetDailyLimit = eachMyCampaign.budget/cmpPeriod*0.75;
+				impbidfactor = 5 + new Random().nextDouble() * 5;
+			}
+			
+			/*
+			 * add bid entries w.r.t. each active campaign with remaining contracted
+			 * impressions.
+			 * 
+			 * for now, a single entry per active campaign is added for queries of
+			 * matching target segment.
+			 */
+	
+			if ((dayBiddingFor >= eachMyCampaign.dayStart)
+					&& (dayBiddingFor <= eachMyCampaign.dayEnd)
+					&& ((eachMyCampaign.reachImps - eachMyCampaign.impsTogo()) < impressionLimit)) {
+		
 				int entCount = 0;
 				int weight = 0;
-				if(dayBiddingFor <= currCampaign.dayStart + 2){
-					impbidfactor = 10;
-					ibid = 1000 * impbidfactor * currCampaign.budget / currCampaign.reachImps;
-				}else if((dayBiddingFor >= currCampaign.dayEnd - 2)&&(currCampaign.impsTogo() > 0)){
-					impbidfactor = 10;
-					ibid = 1000 * impbidfactor * currCampaign.budget / currCampaign.reachImps;
-				}else {
-					ibid = 1000 * impbidfactor * currCampaign.budget / currCampaign.reachImps;
-				}
-				log.info("Day " + day + ": "+"Impressions Remaining:    	" + currCampaign.impsTogo());
-				log.info("Day " + day + ": "+"Impression Bid:           	" + ibid);
 				
-				for (AdxQuery query : currCampaign.campaignQueries) {
-					if (currCampaign.impsTogo() - entCount > 0) {
+				if(dayBiddingFor <= eachMyCampaign.dayStart + 1){
+					impbidfactor = 10;
+					ibid = 1000 * impbidfactor * eachMyCampaign.budget / eachMyCampaign.reachImps;
+				}else if((dayBiddingFor >= eachMyCampaign.dayEnd - 2)&&(eachMyCampaign.impsTogo() > 0)){
+					impbidfactor = 10;
+					ibid = 1000 * impbidfactor * eachMyCampaign.budget / eachMyCampaign.reachImps;
+				}else {
+					ibid = 1000 * impbidfactor * eachMyCampaign.budget / eachMyCampaign.reachImps;
+				}
+				
+				log.info("Day " + day + ": "+"Impressions Remaining:    	" + eachMyCampaign.impsTogo());
+				log.info("Day " + day + ": "+"Impression Bid:           	" + ibid);
+					
+				for (AdxQuery query : eachMyCampaign.campaignQueries) {
+					if (impressionLimit - entCount > 0) {
 						/*
 						 * among matching entries with the same campaign id, the AdX
 						 * randomly chooses an entry according to the designated
@@ -480,37 +481,38 @@ public class LCLAdNetwork extends Agent {
 								entCount++;
 								weight = 1;
 							} else {
-								entCount += currCampaign.videoCoef;
+								entCount += eachMyCampaign.videoCoef;
 								weight = 7;
 							}
 						} else {
 							if (query.getAdType() == AdType.text) {
-								entCount += currCampaign.mobileCoef;
+								entCount += eachMyCampaign.mobileCoef;
 								weight = 4;
 //								ibid = 0;
 							} else {
-								entCount += currCampaign.videoCoef
-										+ currCampaign.mobileCoef;
+								entCount += eachMyCampaign.videoCoef
+										+ eachMyCampaign.mobileCoef;
 								weight = 5;
 //								ibid = 0;
 							}
-	
+		
 						}
 						bidBundle.addQuery(query, ibid, new Ad(null),
-								currCampaign.id, weight);
+								eachMyCampaign.id, weight);
 					}
 				}
-	
-				
-				bidBundle.setCampaignDailyLimit(currCampaign.id,
-						(int) impressionLimit, budgetLimit);
-	
+		
+					
+				bidBundle.setCampaignDailyLimit(eachMyCampaign.id,
+							(int) impressionLimit, budgetDailyLimit);
+		
 				log.info("Day " + day + ": Updated " + entCount
-						+ " Bid Bundle for Campaign id " + currCampaign.id);
+							+ " Bid Bundle for Campaign id " + eachMyCampaign.id);
 			}
-	
+		
 			if (bidBundle != null) {
 				log.info("Day " + day + ": Sending BidBundle");
+				
 				sendMessage(adxAgentAddress, bidBundle);
 			}
 		}	
