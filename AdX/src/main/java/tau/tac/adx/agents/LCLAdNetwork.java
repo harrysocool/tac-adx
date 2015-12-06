@@ -1,4 +1,4 @@
-
+package tau.tac.adx.agents;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -24,7 +24,11 @@ import tau.tac.adx.props.AdxBidBundle;
 import tau.tac.adx.props.AdxQuery;
 import tau.tac.adx.props.PublisherCatalog;
 import tau.tac.adx.props.PublisherCatalogEntry;
+import tau.tac.adx.props.ReservePriceInfo;
+//import tau.tac.adx.props.ReservePriceInfo;
+import tau.tac.adx.report.adn.AdNetworkKey;
 import tau.tac.adx.report.adn.AdNetworkReport;
+import tau.tac.adx.report.adn.AdNetworkReportEntry;
 import tau.tac.adx.report.adn.MarketSegment;
 import tau.tac.adx.report.demand.AdNetBidMessage;
 import tau.tac.adx.report.demand.AdNetworkDailyNotification;
@@ -40,14 +44,13 @@ import edu.umich.eecs.tac.props.BankStatus;
 
 /**
  * 
- * @author Mariano Schain
- * Test plug-in
+ * @author Mariano Schain Test plug-in
  * 
  */
-public class SampleAdNetwork extends Agent {
+public class LCLAdNetwork extends Agent {
 
 	private final Logger log = Logger
-			.getLogger(SampleAdNetwork.class.getName());
+			.getLogger(LCLAdNetwork.class.getName());
 
 	/*
 	 * Basic simulation information. An agent should receive the {@link
@@ -59,7 +62,7 @@ public class SampleAdNetwork extends Agent {
 	/**
 	 * Messages received:
 	 * 
-	 * We keep all the {@link CampaignReport campaign reports} delivered to the
+	 * We keep all the {@link CampaignReport} campaign reports delivered to the
 	 * agent. We also keep the initialization messages {@link PublisherCatalog}
 	 * and {@link InitialCampaignMessage} and the most recent messages and
 	 * reports {@link CampaignOpportunityMessage}, {@link CampaignReport}, and
@@ -68,6 +71,8 @@ public class SampleAdNetwork extends Agent {
 	private final Queue<CampaignReport> campaignReports;
 	private PublisherCatalog publisherCatalog;
 	private InitialCampaignMessage initialCampaignMessage;
+	private CampaignOpportunityMessage campaignOpportunityMessage;
+	private CampaignReport campaignReport;
 	private AdNetworkDailyNotification adNetworkDailyNotification;
 
 	/*
@@ -93,6 +98,7 @@ public class SampleAdNetwork extends Agent {
 	 * by our agent.
 	 */
 	private Map<Integer, CampaignData> myCampaigns;
+	private ArrayList<String> pubNames = new ArrayList<String>();
 
 	/*
 	 * the bidBundle to be sent daily to the AdX
@@ -102,12 +108,21 @@ public class SampleAdNetwork extends Agent {
 	/*
 	 * The current bid level for the user classification service
 	 */
-	double ucsBid;
+	private double ucsBid;
+
+	/*
+	 * The qualityScore for the quality level
+	 */
+	private double qualityScore;
+	private double min_cmpBidMillis;
+	private double max_cmpBidMillis;
+	private double cmpBidfactor;
+	private double lastBid;
 
 	/*
 	 * The targeted service level for the user classification service
 	 */
-	double ucsTargetLevel;
+	private double ucsTargetLevel;
 
 	/*
 	 * current day of simulation
@@ -115,9 +130,17 @@ public class SampleAdNetwork extends Agent {
 	private int day;
 	private String[] publisherNames;
 	private CampaignData currCampaign;
-
-	public SampleAdNetwork() {
+	private double greedyFactor = 1;
+	long cmpBidMillis = 0;
+	
+	/*
+	 * current day of simulation
+	 */
+	private boolean activeCampaign;
+	
+	public LCLAdNetwork() {
 		campaignReports = new LinkedList<CampaignReport>();
+//		System.out.println(campaignReports.toString());
 	}
 
 	@Override
@@ -125,12 +148,12 @@ public class SampleAdNetwork extends Agent {
 		try {
 			Transportable content = message.getContent();
 
-			// log.fine(message.getContent().getClass().toString());
+//			 log.info("===============================================================");
 
 			if (content instanceof InitialCampaignMessage) {
 				handleInitialCampaignMessage((InitialCampaignMessage) content);
 			} else if (content instanceof CampaignOpportunityMessage) {
-				handleICampaignOpportunityMessage((CampaignOpportunityMessage) content);
+				handleCampaignOpportunityMessage((CampaignOpportunityMessage) content);
 			} else if (content instanceof CampaignReport) {
 				handleCampaignReport((CampaignReport) content);
 			} else if (content instanceof AdNetworkDailyNotification) {
@@ -147,10 +170,11 @@ public class SampleAdNetwork extends Agent {
 				handleStartInfo((StartInfo) content);
 			} else if (content instanceof BankStatus) {
 				handleBankStatus((BankStatus) content);
-			} else if(content instanceof CampaignAuctionReport) {
-				hadnleCampaignAuctionReport((CampaignAuctionReport) content);
-			}
-			else {
+//			} else if (content instanceof CampaignAuctionReport) {
+//				hadnleCampaignAuctionReport((CampaignAuctionReport) content);
+			} else if (content instanceof ReservePriceInfo) {
+				handleReservePriceInfo ((ReservePriceInfo) content);
+			} else {
 				System.out.println("UNKNOWN Message Received: " + content);
 			}
 
@@ -161,12 +185,13 @@ public class SampleAdNetwork extends Agent {
 		}
 	}
 
-	private void hadnleCampaignAuctionReport(CampaignAuctionReport content) {
-		// ingoring
+	private void handleReservePriceInfo(ReservePriceInfo content) {
+		// ingoring - this message is obsolete
+		log.info("Day " + day + " :" + content.toString());
 	}
 
 	private void handleBankStatus(BankStatus content) {
-		System.out.println("Day " + day + " :" + content.toString());
+		log.info("Day " + day + ":			" + content.toString());
 	}
 
 	/**
@@ -186,9 +211,10 @@ public class SampleAdNetwork extends Agent {
 	 */
 	private void handlePublisherCatalog(PublisherCatalog publisherCatalog) {
 		this.publisherCatalog = publisherCatalog;
+		/*generate all possible impression opportunity*/
 		generateAdxQuerySpace();
+		/*generate 6 Publisher Name*/
 		getPublishersNames();
-
 	}
 
 	/**
@@ -200,16 +226,19 @@ public class SampleAdNetwork extends Agent {
 	 */
 	private void handleInitialCampaignMessage(
 			InitialCampaignMessage campaignMessage) {
-		System.out.println(campaignMessage.toString());
+//		System.out.println(campaignMessage.toString());
 
 		day = 0;
+		qualityScore = 1.0;
+		greedyFactor = 1.0;
 
 		initialCampaignMessage = campaignMessage;
 		demandAgentAddress = campaignMessage.getDemandAgentAddress();
 		adxAgentAddress = campaignMessage.getAdxAgentAddress();
 
 		CampaignData campaignData = new CampaignData(initialCampaignMessage);
-		campaignData.setBudget(initialCampaignMessage.getBudgetMillis()/1000.0);
+		campaignData
+				.setBudget(initialCampaignMessage.getBudgetMillis() / 1000.0);
 		currCampaign = campaignData;
 		genCampaignQueries(currCampaign);
 
@@ -217,7 +246,8 @@ public class SampleAdNetwork extends Agent {
 		 * The initial campaign is already allocated to our agent so we add it
 		 * to our allocated-campaigns list.
 		 */
-		System.out.println("Day " + day + ": Allocated campaign - " + campaignData);
+		log.info("Day " + day + ": Allocated campaign - "
+				+ campaignData);
 		myCampaigns.put(initialCampaignMessage.getId(), campaignData);
 	}
 
@@ -227,13 +257,15 @@ public class SampleAdNetwork extends Agent {
 	 * (on day n) related bids (attempting to win the campaign). The allocation
 	 * (the winner) is announced to the competing agents during day n + 1.
 	 */
-	private void handleICampaignOpportunityMessage(
+	private void handleCampaignOpportunityMessage(
 			CampaignOpportunityMessage com) {
 
+		campaignOpportunityMessage = com;
 		day = com.getDay();
 
 		pendingCampaign = new CampaignData(com);
-		System.out.println("Day " + day + ": Campaign opportunity - " + pendingCampaign);
+		log.info("Day " + day + ": Campaign opportunity - "
+				+ pendingCampaign);
 
 		/*
 		 * The campaign requires com.getReachImps() impressions. The competing
@@ -245,10 +277,23 @@ public class SampleAdNetwork extends Agent {
 		 */
 
 		Random random = new Random();
-		long cmpimps = com.getReachImps();
-		long cmpBidMillis = random.nextInt((int)cmpimps);
 
-		System.out.println("Day " + day + ": Campaign total budget bid (millis): " + cmpBidMillis);
+		long cmpimps = com.getReachImps();
+
+		min_cmpBidMillis = cmpimps/qualityScore/10 + 1;
+		max_cmpBidMillis = cmpimps*qualityScore - 1;
+
+		if(cmpimps * greedyFactor > max_cmpBidMillis){
+			cmpBidMillis = (long) max_cmpBidMillis;
+		}else if(cmpimps * greedyFactor < min_cmpBidMillis){
+			cmpBidMillis = (long) min_cmpBidMillis;
+		}else{
+			cmpBidMillis = (long) (cmpimps * greedyFactor);
+		}
+		
+		log.info("Day " + day
+				+ ": Campaign total budget bid (millis): " + cmpBidMillis 
+				);
 
 		/*
 		 * Adjust ucs bid s.t. target level is achieved. Note: The bid for the
@@ -256,17 +301,40 @@ public class SampleAdNetwork extends Agent {
 		 */
 
 		if (adNetworkDailyNotification != null) {
-			double ucsLevel = adNetworkDailyNotification.getServiceLevel();
-			ucsBid = 0.1 + random.nextDouble()/10.0;			
-			System.out.println("Day " + day + ": ucs level reported: " + ucsLevel);
+//			double ucsLevel = adNetworkDailyNotification.getServiceLevel();
+			/* Determine how much ucsBid to submit*/
+			if((day >= currCampaign.dayEnd)) {
+				ucsBid = 0;
+			}else if(qualityScore <= 0.75){
+				ucsBid = 0.2;
+			}else{
+				ucsBid = 0.1 + random.nextDouble() / 10.0;;
+			}
+//			log.info("Day " + day + ": adNetwork Daily Notification: ucs level reported: "
+//					+ ucsLevel);
 		} else {
-			System.out.println("Day " + day + ": Initial ucs bid is " + ucsBid);
+			log.info("Day " + day + ": Initial ucs bid is " + ucsBid);
 		}
 
 		/* Note: Campaign bid is in millis */
-		AdNetBidMessage bids = new AdNetBidMessage(ucsBid, pendingCampaign.id, cmpBidMillis);
+		AdNetBidMessage bids = new AdNetBidMessage(ucsBid, pendingCampaign.id,
+				cmpBidMillis);
 		sendMessage(demandAgentAddress, bids);
 	}
+
+//	private Random new Random() {
+//		// TODO Auto-generated method stub
+//		return null;
+//	}
+	
+	protected static Random random = new Random();
+	
+	public static double randomInRange(double min, double max) {
+		  double range = max - min;
+		  double scaled = random.nextDouble() * range;
+		  double shifted = scaled + min;
+		  return shifted; // == (rand.nextDouble() * (max-min)) + min;
+		}
 
 	/**
 	 * On day n ( > 0), the result of the UserClassificationService and Campaign
@@ -279,29 +347,47 @@ public class SampleAdNetwork extends Agent {
 
 		adNetworkDailyNotification = notificationMessage;
 
-		System.out.println("Day " + day + ": Daily notification for campaign "
-				+ adNetworkDailyNotification.getCampaignId());
-
-		String campaignAllocatedTo = " allocated to "
-				+ notificationMessage.getWinner();
-
+		if(day < 2){
+			greedyFactor = 1.0;
+		}else if(notificationMessage.getCostMillis() == 0){
+			greedyFactor /= 1.2;
+		}else if(notificationMessage.getCostMillis() == cmpBidMillis){
+			greedyFactor *= 1;
+		}else if(notificationMessage.getCostMillis() != cmpBidMillis){
+			greedyFactor *= 1.5;
+		}
+		
+		log.info("Day " + day + ": Daily Notification for campaign "
+				+ adNetworkDailyNotification.getCampaignId()
+				+ " allocated to " 
+				+ notificationMessage.getWinner()
+				);
+		/* we won the pendingCampaign */
 		if ((pendingCampaign.id == adNetworkDailyNotification.getCampaignId())
 				&& (notificationMessage.getCostMillis() != 0)) {
 
 			/* add campaign to list of won campaigns */
-			pendingCampaign.setBudget(notificationMessage.getCostMillis()/1000.0);
+			pendingCampaign
+					.setBudget(notificationMessage.getCostMillis() / 1000.0);
 			currCampaign = pendingCampaign;
+			/* ????????????????????????? */
 			genCampaignQueries(currCampaign);
 			myCampaigns.put(pendingCampaign.id, pendingCampaign);
 
-			campaignAllocatedTo = " WON at cost (Millis)"
-					+ notificationMessage.getCostMillis();
+			log.info( "Day " + day + ": " + "WON at cost (Millis)"
+					+ notificationMessage.getCostMillis());
 		}
 
-		System.out.println("Day " + day + ": " + campaignAllocatedTo
-				+ ". UCS Level set to " + notificationMessage.getServiceLevel()
-				+ " at price " + notificationMessage.getPrice()
-				+ " Quality Score is: " + notificationMessage.getQualityScore());
+		qualityScore = notificationMessage.getQualityScore();
+
+		log.info("Day " + day + ": "
+						+ "UCS Level: 			"
+						+ notificationMessage.getServiceLevel() 
+						+ "  price	" + notificationMessage.getPrice()
+						);
+		log.info("Day " + day+ ": " +"Quality Score is: 		" + qualityScore
+				);
+		log.info("Day " + day+ ": " +"Greedyfactor: 			"+ greedyFactor);
 	}
 
 	/**
@@ -310,9 +396,11 @@ public class SampleAdNetwork extends Agent {
 	 * to the AdX.
 	 */
 	private void handleSimulationStatus(SimulationStatus simulationStatus) {
-		System.out.println("Day " + day + " : Simulation Status Received");
+		log.info("Day " + day + ": Simulation Status Received");
 		sendBidAndAds();
-		System.out.println("Day " + day + " ended. Starting next day");
+		log.info("Day " + day + ": ended. Starting next day");
+		log.info("===============================================================");
+		/* Next day start*/
 		++day;
 	}
 
@@ -326,73 +414,109 @@ public class SampleAdNetwork extends Agent {
 		/*
 		 * 
 		 */
-
-		int dayBiddingFor = day + 1;
-
-		/* A fixed random bid, for all queries of the campaign */
-		/*
-		 * Note: bidding per 1000 imps (CPM) - no more than average budget
-		 * revenue per imp
-		 */
-
-		double rbid = 10000.0;
-
-		/*
-		 * add bid entries w.r.t. each active campaign with remaining contracted
-		 * impressions.
-		 * 
-		 * for now, a single entry per active campaign is added for queries of
-		 * matching target segment.
-		 */
-
-		if ((dayBiddingFor >= currCampaign.dayStart)
-				&& (dayBiddingFor <= currCampaign.dayEnd)
-				&& (currCampaign.impsTogo() > 0)) {
-
-			int entCount = 0;
-
-			for (AdxQuery query : currCampaign.campaignQueries) {
-				if (currCampaign.impsTogo() - entCount > 0) {
-					/*
-					 * among matching entries with the same campaign id, the AdX
-					 * randomly chooses an entry according to the designated
-					 * weight. by setting a constant weight 1, we create a
-					 * uniform probability over active campaigns(irrelevant because we are bidding only on one campaign)
-					 */
-					if (query.getDevice() == Device.pc) {
-						if (query.getAdType() == AdType.text) {
-							entCount++;
-						} else {
-							entCount += currCampaign.videoCoef;
-						}
-					} else {
-						if (query.getAdType() == AdType.text) {
-							entCount+=currCampaign.mobileCoef;
-						} else {
-							entCount += currCampaign.videoCoef + currCampaign.mobileCoef;
-						}
-
-					}
-					bidBundle.addQuery(query, rbid, new Ad(null),
-							currCampaign.id, 1);
-				}
+		for (CampaignData eachMyCampaign : myCampaigns.values()) {
+		
+			int dayBiddingFor = day + 1;
+	
+			/* A random bid, fixed for all queries of the campaign */
+			/*
+			 * Note: bidding per 1000 imps (CPM) - no more than average budget
+			 * revenue per imp
+			 */
+			double ibid;
+			double impressionLimit;
+			double budgetDailyLimit;
+			double impbidfactor;
+			double cmpPeriod = eachMyCampaign.dayEnd - eachMyCampaign.dayStart + 1;
+			
+			if(qualityScore <= 0.85){
+				impressionLimit =  eachMyCampaign.impsTogo() * 1.1;
+				budgetDailyLimit = eachMyCampaign.budget/cmpPeriod;
+				impbidfactor = 10;
+			}else{
+				impressionLimit = eachMyCampaign.impsTogo();
+				budgetDailyLimit = eachMyCampaign.budget/cmpPeriod*0.75;
+				impbidfactor = 5 + new Random().nextDouble() * 5;
 			}
-
-			double impressionLimit = currCampaign.impsTogo();
-			double budgetLimit = currCampaign.budget;
-			bidBundle.setCampaignDailyLimit(currCampaign.id,
-					(int) impressionLimit, budgetLimit);
-
-			System.out.println("Day " + day + ": Updated " + entCount
-					+ " Bid Bundle entries for Campaign id " + currCampaign.id);
-		}
-
-		if (bidBundle != null) {
-			System.out.println("Day " + day + ": Sending BidBundle");
-			sendMessage(adxAgentAddress, bidBundle);
-		}
+			
+			/*
+			 * add bid entries w.r.t. each active campaign with remaining contracted
+			 * impressions.
+			 * 
+			 * for now, a single entry per active campaign is added for queries of
+			 * matching target segment.
+			 */
+	
+			if ((dayBiddingFor >= eachMyCampaign.dayStart)
+					&& (dayBiddingFor <= eachMyCampaign.dayEnd)
+					&& ((eachMyCampaign.reachImps - eachMyCampaign.impsTogo()) < impressionLimit)) {
+		
+				int entCount = 0;
+				int weight = 0;
+				
+				if(dayBiddingFor <= eachMyCampaign.dayStart + 1){
+					impbidfactor = 10;
+					ibid = 1000 * impbidfactor * eachMyCampaign.budget / eachMyCampaign.reachImps;
+				}else if((dayBiddingFor >= eachMyCampaign.dayEnd - 2)&&(eachMyCampaign.impsTogo() > 0)){
+					impbidfactor = 10;
+					ibid = 1000 * impbidfactor * eachMyCampaign.budget / eachMyCampaign.reachImps;
+				}else {
+					ibid = 1000 * impbidfactor * eachMyCampaign.budget / eachMyCampaign.reachImps;
+				}
+				
+				log.info("Day " + day + ": "+"Impressions Remaining:    	" + eachMyCampaign.impsTogo());
+				log.info("Day " + day + ": "+"Impression Bid:           	" + ibid);
+					
+				for (AdxQuery query : eachMyCampaign.campaignQueries) {
+					if (impressionLimit - entCount > 0) {
+						/*
+						 * among matching entries with the same campaign id, the AdX
+						 * randomly chooses an entry according to the designated
+						 * weight. by setting a constant weight 1, we create a
+						 * uniform probability over active campaigns(irrelevant
+						 * because we are bidding only on one campaign)
+						 */
+						if (query.getDevice() == Device.pc) {
+							if (query.getAdType() == AdType.text) {
+								entCount++;
+								weight = 1;
+							} else {
+								entCount += eachMyCampaign.videoCoef;
+								weight = 7;
+							}
+						} else {
+							if (query.getAdType() == AdType.text) {
+								entCount += eachMyCampaign.mobileCoef;
+								weight = 4;
+//								ibid = 0;
+							} else {
+								entCount += eachMyCampaign.videoCoef
+										+ eachMyCampaign.mobileCoef;
+								weight = 5;
+//								ibid = 0;
+							}
+		
+						}
+						bidBundle.addQuery(query, ibid, new Ad(null),
+								eachMyCampaign.id, weight);
+					}
+				}
+		
+					
+				bidBundle.setCampaignDailyLimit(eachMyCampaign.id,
+							(int) impressionLimit, budgetDailyLimit);
+		
+				log.info("Day " + day + ": Updated " + entCount
+							+ " Bid Bundle for Campaign id " + eachMyCampaign.id);
+			}
+		
+			if (bidBundle != null) {
+				log.info("Day " + day + ": Sending BidBundle");
+				
+				sendMessage(adxAgentAddress, bidBundle);
+			}
+		}	
 	}
-
 	/**
 	 * Campaigns performance w.r.t. each allocated campaign
 	 */
@@ -409,11 +533,18 @@ public class SampleAdNetwork extends Agent {
 			CampaignStats cstats = campaignReport.getCampaignReportEntry(
 					campaignKey).getCampaignStats();
 			myCampaigns.get(cmpId).setStats(cstats);
-
-			System.out.println("Day " + day + ": Updating campaign " + cmpId + " stats: "
-					+ cstats.getTargetedImps() + " tgtImps "
-					+ cstats.getOtherImps() + " nonTgtImps. Cost of imps is "
-					+ cstats.getCost());
+			log.info("Day " + day + ": Updating campaign " + cmpId
+					+ " Ends at Day " + myCampaigns.get(cmpId).dayEnd
+					+ " Reaches :" + myCampaigns.get(cmpId).reachImps
+					+ " tgtImps "  + cstats.getTargetedImps() 
+					);
+			log.info("Day " + day + ": "+"finish rate: 			" + cstats.getTargetedImps()/myCampaigns.get(cmpId).reachImps
+					);
+			log.info("Day " + day+ ": " +"Cost of imps is 			" + cstats.getCost()
+					+ "  Bugets: 	" + myCampaigns.get(cmpId).budget
+					);
+			log.info("Day " + day + ": "+"Cost rates: 			" + cstats.getCost()/myCampaigns.get(cmpId).budget
+					);
 		}
 	}
 
@@ -421,11 +552,11 @@ public class SampleAdNetwork extends Agent {
 	 * Users and Publishers statistics: popularity and ad type orientation
 	 */
 	private void handleAdxPublisherReport(AdxPublisherReport adxPublisherReport) {
-		System.out.println("Publishers Report: ");
+//		log.info("Publishers Report: ");
 		for (PublisherCatalogEntry publisherKey : adxPublisherReport.keys()) {
 			AdxPublisherReportEntry entry = adxPublisherReport
 					.getEntry(publisherKey);
-			System.out.println(entry.toString());
+//			log.info(entry.toString());
 		}
 	}
 
@@ -435,7 +566,19 @@ public class SampleAdNetwork extends Agent {
 	 */
 	private void handleAdNetworkReport(AdNetworkReport adnetReport) {
 
-		System.out.println("Day " + day + " : AdNetworkReport");
+//		log.info("Day " + day+ ": " + "AdNetworkReport");
+		for (AdNetworkKey adnetKey : adnetReport.keys()) {
+			AdNetworkReportEntry entry = adnetReport .getAdNetworkReportEntry(adnetKey);
+//			System.out.println("Publisher: " + adnetKey.getPublisher() 
+//								+ " " + adnetKey.getAdType() + " " + adnetKey.getDevice()
+//								+ " " + adnetKey.getIncome() + " " + adnetKey.getGender()
+//								+ "************"
+//								+ " BidCount: " + entry.getBidCount()
+//								+ " Bidwin: " + entry.getWinCount()
+//								+ " Bid Cost: " + entry.getCost()); 
+		}
+		log.info("Day " + day+ ": "+"Impression DailyCost 		"+ adnetReport.getDailyCost());
+		
 		/*
 		 * for (AdNetworkKey adnetKey : adnetReport.keys()) {
 		 * 
@@ -447,12 +590,13 @@ public class SampleAdNetwork extends Agent {
 
 	@Override
 	protected void simulationSetup() {
+		Random random = new Random();
 
 		day = 0;
 		bidBundle = new AdxBidBundle();
 
 		/* initial bid between 0.1 and 0.2 */
-		ucsBid = 0.2;
+		ucsBid = 0.1;
 
 		myCampaigns = new HashMap<Integer, CampaignData>();
 		log.fine("AdNet " + getName() + " simulationSetup");
@@ -521,11 +665,15 @@ public class SampleAdNetwork extends Agent {
 			}
 			queries = new AdxQuery[querySet.size()];
 			querySet.toArray(queries);
+			for (AdxQuery arrays : querySet) {
+//				log.info(arrays.toString());
+			}
 		}
 	}
-	
-	/*genarates an array of the publishers names
-	 * */
+    
+	/*
+	 * genarates an array of the publishers names
+	 */
 	private void getPublishersNames() {
 		if (null == publisherNames && publisherCatalog != null) {
 			ArrayList<String> names = new ArrayList<String>();
@@ -535,10 +683,13 @@ public class SampleAdNetwork extends Agent {
 
 			publisherNames = new String[names.size()];
 			names.toArray(publisherNames);
+			log.info("Publisher: " + names.toString()); 
 		}
 	}
+
 	/*
-	 * genarates the campaign queries relevant for the specific campaign, and assign them as the campaigns campaignQueries field 
+	 * genarates the campaign queries relevant for the specific campaign, and
+	 * assign them as the campaigns campaignQueries field
 	 */
 	private void genCampaignQueries(CampaignData campaignData) {
 		Set<AdxQuery> campaignQueriesSet = new HashSet<AdxQuery>();
@@ -555,9 +706,10 @@ public class SampleAdNetwork extends Agent {
 
 		campaignData.campaignQueries = new AdxQuery[campaignQueriesSet.size()];
 		campaignQueriesSet.toArray(campaignData.campaignQueries);
-		System.out.println("!!!!!!!!!!!!!!!!!!!!!!"+Arrays.toString(campaignData.campaignQueries)+"!!!!!!!!!!!!!!!!");
-		
-
+		/* log the campaignData.campaignQueries */
+		for (AdxQuery arrays : campaignData.campaignQueries) {
+//			log.info(arrays.toString()ing());
+		}
 	}
 
 	private class CampaignData {
@@ -569,7 +721,8 @@ public class SampleAdNetwork extends Agent {
 		double videoCoef;
 		double mobileCoef;
 		int id;
-		private AdxQuery[] campaignQueries;//array of queries relvent for the campaign.
+		private AdxQuery[] campaignQueries;// array of queries relvent for the
+											// campaign.
 
 		/* campaign info as reported */
 		CampaignStats stats;
